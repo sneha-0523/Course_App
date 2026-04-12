@@ -58,8 +58,12 @@ jobs:
 
     - name: Run Backend Tests
       run: |
-        cd backend
-        ./mvnw test
+       cd backend
+       ./mvnw test
+      env:
+       DB_URL: jdbc:mysql://localhost:3306/newdb
+       DB_USERNAME: root
+       DB_PASSWORD: root
 
     - name: Set up Node
       uses: actions/setup-node@v4
