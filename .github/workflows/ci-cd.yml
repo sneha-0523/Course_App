@@ -56,6 +56,13 @@ jobs:
         chmod +x mvnw
         ./mvnw clean package -DskipTests
 
+    - name: SonarCloud Scan (SAST)
+      uses: SonarSource/sonarcloud-github-action@v2
+      with:
+        projectBaseDir: backend
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
     - name: Run Backend Tests
       run: |
        cd backend
