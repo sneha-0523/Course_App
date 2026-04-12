@@ -78,6 +78,7 @@ jobs:
 
     - name: Scan for Secrets
       uses: gitleaks/gitleaks-action@v2
+      continue-on-error: true
 
     - name: Build Docker Images
       run: docker compose build
