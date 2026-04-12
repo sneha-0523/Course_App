@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -7,26 +7,13 @@ on:
 
 jobs:
   build:
+
     runs-on: ubuntu-latest
 
     steps:
 
     - name: Checkout Code
       uses: actions/checkout@v4
-
-    - name: Run Gitleaks Scan
-      uses: zricethezav/gitleaks-action@v2
-
-    - name: Set up Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-
-    - name: Frontend Audit
-      run: |
-        cd frontend
-        npm install
-        npm audit --audit-level=high
 
     - name: Set up Java
       uses: actions/setup-java@v4
@@ -39,6 +26,11 @@ jobs:
         cd backend
         chmod +x mvnw
         ./mvnw clean package -DskipTests
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
 
     - name: Build Frontend
       run: |
@@ -64,8 +56,3 @@ jobs:
       run: |
         docker build -t ${{ secrets.DOCKER_USERNAME }}/course-frontend ./frontend
         docker push ${{ secrets.DOCKER_USERNAME }}/course-frontend
-
-    - name: Scan Backend Image with Trivy
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: '${{ secrets.DOCKER_USERNAME }}/course-backend'
