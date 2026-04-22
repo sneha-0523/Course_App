@@ -9,17 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: newdb
-        ports:
-          - 3306:3306
-
     env:
-      DB_URL: jdbc:mysql://127.0.0.1:3306/newdb
+      DB_URL: jdbc:mysql://db:3306/newdb
       DB_USERNAME: root
       DB_PASSWORD: root
       DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_USERNAME }}/course-backend
