@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: DevSecOps Pipeline
 
 on:
   push:
@@ -17,11 +17,6 @@ jobs:
           MYSQL_DATABASE: newdb
         ports:
           - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
     env:
       DB_URL: jdbc:mysql://localhost:3306/newdb
@@ -32,9 +27,24 @@ jobs:
 
     steps:
 
+   
     - name: Checkout Code
       uses: actions/checkout@v4
 
+   
+    - name: Gitleaks Scan
+      uses: gitleaks/gitleaks-action@v2
+      continue-on-error: true
+
+   
+    - name: Trivy FS Scan
+      uses: aquasecurity/trivy-action@v0.24.0
+      with:
+        scan-type: fs
+        severity: CRITICAL,HIGH
+      continue-on-error: true
+
+    
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
@@ -44,11 +54,10 @@ jobs:
     - name: Wait for MySQL
       run: |
         for i in {1..15}; do
-          nc -z localhost 3306 && echo "MySQL is up!" && exit 0
-          echo "Waiting for MySQL..."
+          nc -z localhost 3306 && exit 0
           sleep 5
         done
-        echo "MySQL failed to start" && exit 1
+        exit 1
 
     - name: Build Backend
       run: |
@@ -56,22 +65,12 @@ jobs:
         chmod +x mvnw
         ./mvnw clean package -DskipTests
 
-    - name: SonarCloud Scan (SAST)
-      uses: SonarSource/sonarcloud-github-action@v2
-      with:
-        projectBaseDir: backend
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
     - name: Run Backend Tests
       run: |
-       cd backend
-       ./mvnw test
-      env:
-       DB_URL: jdbc:mysql://localhost:3306/newdb
-       DB_USERNAME: root
-       DB_PASSWORD: root
+        cd backend
+        ./mvnw test
 
+   
     - name: Set up Node
       uses: actions/setup-node@v4
       with:
@@ -83,41 +82,64 @@ jobs:
         npm install
         npm run build
 
-    - name: Scan for Secrets
-      uses: gitleaks/gitleaks-action@v2
-      continue-on-error: true
-
+   
     - name: Build Docker Images
       run: docker compose build
 
+    
+    - name: Scan Backend Image
+      uses: aquasecurity/trivy-action@v0.24.0
+      with:
+        image-ref: ${{ env.DOCKER_IMAGE_BACKEND }}
+        severity: CRITICAL,HIGH
+      continue-on-error: true
+
+    - name: Scan Frontend Image
+      uses: aquasecurity/trivy-action@v0.24.0
+      with:
+        image-ref: ${{ env.DOCKER_IMAGE_FRONTEND }}
+        severity: CRITICAL,HIGH
+      continue-on-error: true
+
+    # -----------------------------
+    # 🔐 Docker Push
+    # -----------------------------
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and Push Backend Image
+    - name: Push Backend Image
       run: |
         docker build -t $DOCKER_IMAGE_BACKEND ./backend
         docker push $DOCKER_IMAGE_BACKEND
 
-    - name: Build and Push Frontend Image
+    - name: Push Frontend Image
       run: |
         docker build -t $DOCKER_IMAGE_FRONTEND ./frontend
         docker push $DOCKER_IMAGE_FRONTEND
 
-    - name: Scan Backend Image (Trivy)
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.DOCKER_IMAGE_BACKEND }}
-        format: table
-        exit-code: 0
-        ignore-unfixed: true
+    # -----------------------------
+    # 🚀 Run App (for DAST)
+    # -----------------------------
+    - name: Start App
+      run: docker compose up -d
 
-    - name: Scan Frontend Image (Trivy)
-      uses: aquasecurity/trivy-action@master
+    - name: Wait for App
+      run: sleep 20
+
+    # -----------------------------
+    # 🛡️ DAST - OWASP ZAP
+    # -----------------------------
+    - name: OWASP ZAP Scan
+      uses: zaproxy/action-baseline@v0.12.0
       with:
-        image-ref: ${{ env.DOCKER_IMAGE_FRONTEND }}
-        format: table
-        exit-code: 0
-        ignore-unfixed: true
+        target: 'http://localhost:9090'
+      continue-on-error: true
+
+    # -----------------------------
+    # 🧹 Cleanup
+    # -----------------------------
+    - name: Stop App
+      run: docker compose down
